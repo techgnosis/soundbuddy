@@ -66,12 +66,7 @@ type PipeWire struct {
 	Version string // e.g. "1.6.6"
 
 	DefaultSinkName   string // node.name of the default sink, from metadata
-	DefaultSourceName string // node.name of the default source (may be a sink's .monitor)
-
-	// DefaultSourceFallback is true when no real default source is configured and
-	// the effective default input is the default sink's monitor (the behaviour
-	// pactl/PulseAudio reports). DefaultSourceName then ends in ".monitor".
-	DefaultSourceFallback bool
+	DefaultSourceName string // node.name of the default source
 
 	Sinks   []Node
 	Sources []Node

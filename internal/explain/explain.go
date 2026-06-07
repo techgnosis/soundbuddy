@@ -203,11 +203,11 @@ func writeDevices(b *strings.Builder, s style, f model.Facts) {
 }
 
 func writeNodes(b *strings.Builder, s style, f model.Facts) {
-	writeNodeSection(b, s, "SINKS (outputs)", f.PipeWire.Sinks, true, f)
-	writeNodeSection(b, s, "SOURCES (inputs)", f.PipeWire.Sources, false, f)
+	writeNodeSection(b, s, "SINKS (outputs)", f.PipeWire.Sinks)
+	writeNodeSection(b, s, "SOURCES (inputs)", f.PipeWire.Sources)
 }
 
-func writeNodeSection(b *strings.Builder, s style, title string, nodes []model.Node, isSink bool, f model.Facts) {
+func writeNodeSection(b *strings.Builder, s style, title string, nodes []model.Node) {
 	section(b, s, fmt.Sprintf("%s — %d", title, len(nodes)))
 	if len(nodes) == 0 {
 		b.WriteString("  (none)\n")
@@ -216,11 +216,7 @@ func writeNodeSection(b *strings.Builder, s style, title string, nodes []model.N
 	sorted := append([]model.Node(nil), nodes...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
 
-	header := []string{"", "ID", "NAME", "STATE", "VOL", "ALSA", "DEVICE-PATH"}
-	if isSink {
-		header = append(header, "MONITOR-SRC")
-	}
-	rows := [][]string{header}
+	rows := [][]string{{"", "ID", "NAME", "STATE", "VOL", "ALSA", "DEVICE-PATH"}}
 	for _, n := range sorted {
 		marker := " "
 		if n.IsDefault {
@@ -230,7 +226,7 @@ func writeNodeSection(b *strings.Builder, s style, title string, nodes []model.N
 		if n.AlsaCard >= 0 {
 			alsa = "card " + strconv.Itoa(n.AlsaCard)
 		}
-		row := []string{
+		rows = append(rows, []string{
 			marker,
 			"id " + strconv.Itoa(n.ID),
 			nodeLabel(n),
@@ -238,21 +234,10 @@ func writeNodeSection(b *strings.Builder, s style, title string, nodes []model.N
 			volStr(n),
 			alsa,
 			orDash(n.AlsaPath),
-		}
-		if isSink {
-			mon := "available"
-			if monitorIsDefault(f, n) {
-				mon = "★ default input"
-			}
-			row = append(row, mon)
-		}
-		rows = append(rows, row)
+		})
 	}
 	b.WriteString(tabBlock("  ", rows))
 	b.WriteString(s.dim("  (* = current default)") + "\n")
-	if isSink {
-		b.WriteString(s.dim("  Every sink has a .monitor source — a loopback input that captures whatever it plays.") + "\n")
-	}
 }
 
 func writeDefaults(b *strings.Builder, s style, f model.Facts) {
@@ -266,8 +251,7 @@ func writeDefaults(b *strings.Builder, s style, f model.Facts) {
 	b.WriteString(tabBlock("  ", rows))
 }
 
-// defaultSourceStr resolves the default input, which may be a real source or —
-// when none is configured — a sink's .monitor (matching what pactl reports).
+// defaultSourceStr resolves the default input to its friendly label.
 func defaultSourceStr(f model.Facts) string {
 	name := f.PipeWire.DefaultSourceName
 	if name == "" {
@@ -276,28 +260,7 @@ func defaultSourceStr(f model.Facts) string {
 	if n := findDefault(f.PipeWire.Sources, name); n != nil {
 		return defaultStr(n)
 	}
-	if sink := sinkByMonitorName(f, name); sink != nil {
-		note := ""
-		if f.PipeWire.DefaultSourceFallback {
-			note = "  (no input device set — falls back to this output's monitor)"
-		}
-		return fmt.Sprintf("%s  [monitor of output id %d]%s", name, sink.ID, note)
-	}
 	return name
-}
-
-// monitorIsDefault reports whether the given sink's monitor is the default input.
-func monitorIsDefault(f model.Facts, sink model.Node) bool {
-	return f.PipeWire.DefaultSourceName == sink.Name+".monitor"
-}
-
-func sinkByMonitorName(f model.Facts, monitor string) *model.Node {
-	for i := range f.PipeWire.Sinks {
-		if f.PipeWire.Sinks[i].Name+".monitor" == monitor {
-			return &f.PipeWire.Sinks[i]
-		}
-	}
-	return nil
 }
 
 // writeFlow draws, per card, how the same physical device is labelled and
@@ -366,13 +329,6 @@ func writeFlowNode(b *strings.Builder, kind string, n model.Node, f model.Facts)
 	}
 	if n.AlsaName != "" {
 		fmt.Fprintf(b, "             │        ALSA reports endpoint: «%s»\n", n.AlsaName)
-	}
-	if kind == "sink" {
-		flag := " (loopback capture of this output)"
-		if monitorIsDefault(f, n) {
-			flag = "  ★default input (loopback capture of this output)"
-		}
-		fmt.Fprintf(b, "             │        monitor «%s.monitor»%s\n", n.Name, flag)
 	}
 }
 
@@ -501,8 +457,7 @@ func writeGlossary(b *strings.Builder, s style, f model.Facts) {
 			{"device", "A PipeWire object for a whole sound device — usually one per ALSA card."},
 			{"node", "A PipeWire endpoint in the audio graph: a single sink or source."},
 			{"sink", "An output — where audio plays out to (speakers, headphones, HDMI)."},
-			{"source", "An input — where audio is captured from (microphone, line-in, a sink's monitor)."},
-			{"monitor", "An automatic loopback source paired with every sink (named <sink>.monitor); captures whatever that sink plays. Used to record system audio. When no real input is set, it becomes the default source."},
+			{"source", "An input — where audio is captured from (microphone, line-in)."},
 			{"default", "The sink/source apps use unless told otherwise (marked * above)."},
 			{"vol", "Volume, as a percentage of the node's set level (can exceed 100% if boosted)."},
 		}},

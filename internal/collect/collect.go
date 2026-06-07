@@ -33,14 +33,6 @@ func All() model.Facts {
 	markDefault(pw.Sinks, pw.DefaultSinkName)
 	markDefault(pw.Sources, pw.DefaultSourceName)
 
-	// When no real source is the default, the PulseAudio shim falls back to the
-	// default sink's monitor (a loopback of what's playing). Reflect that so the
-	// reported default input matches `pactl info`.
-	if pw.DefaultSourceName == "" && len(pw.Sources) == 0 && pw.DefaultSinkName != "" {
-		pw.DefaultSourceName = pw.DefaultSinkName + ".monitor"
-		pw.DefaultSourceFallback = true
-	}
-
 	f.PipeWire = pw
 	f.WirePlumber = wp
 
