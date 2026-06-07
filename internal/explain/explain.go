@@ -362,7 +362,7 @@ func writeFlowNode(b *strings.Builder, kind string, n model.Node, f model.Facts)
 	fmt.Fprintf(b, "             │        label   «%s» · %s · %s\n",
 		nodeLabel(n), volStr(n), orDash(n.State))
 	if n.AlsaPath != "" {
-		fmt.Fprintf(b, "             │        opens   %s\n", connectorNote(n.AlsaPath))
+		fmt.Fprintf(b, "             │        opens   %s\n", connectorNote(n.AlsaPath, f))
 	}
 	if n.AlsaName != "" {
 		fmt.Fprintf(b, "             │        ALSA reports endpoint: «%s»\n", n.AlsaName)
@@ -378,10 +378,19 @@ func writeFlowNode(b *strings.Builder, kind string, n model.Node, f model.Facts)
 
 // connectorNote decodes an ALSA path and, for HDMI, explains the connector index
 // vs the one-based label PipeWire shows in the node name.
-func connectorNote(path string) string {
+func connectorNote(path string, f model.Facts) string {
 	p := parseAlsaPath(path)
-	if p.Card < 0 || p.Device < 0 {
+	if p.Card < 0 {
 		return path
+	}
+	// Name-only paths like "front:2" or "hw:2" carry a card but no device
+	// number; resolve the card to its human name so the open-path ties back to
+	// the ALSA CARDS / PIPEWIRE DEVICES listings.
+	if p.Device < 0 {
+		if c := findCard(f.ALSA.Cards, p.Card); c != nil {
+			return fmt.Sprintf("%s  →  card %d, %s", path, p.Card, cardName(*c))
+		}
+		return fmt.Sprintf("%s  →  card %d", path, p.Card)
 	}
 	base := fmt.Sprintf("%s  →  card %d, ", path, p.Card)
 	if p.PCM == "hdmi" {
@@ -423,6 +432,18 @@ func findDeviceForCard(devs []model.Device, card int) *model.Device {
 	for i := range devs {
 		if devs[i].AlsaCard == card {
 			return &devs[i]
+		}
+	}
+	return nil
+}
+
+func findCard(cards []model.Card, index int) *model.Card {
+	if index < 0 {
+		return nil
+	}
+	for i := range cards {
+		if cards[i].Index == index {
+			return &cards[i]
 		}
 	}
 	return nil
